@@ -2,6 +2,7 @@ package com.sonnet.service;
 
 import com.sonnet.model.domain.User;
 import com.baomidou.mybatisplus.extension.service.IService;
+import jakarta.servlet.http.HttpServletRequest;
 
 /**
 * @author chang
@@ -12,5 +13,5 @@ public interface UserService extends IService<User> {
 
     long userRegister(String userAccount, String password, String checkPassword);
 
-    User userLogin(String userAccount, String password);
+    User userLogin(String userAccount, String password, HttpServletRequest request);
 }

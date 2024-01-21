@@ -1,12 +1,19 @@
 package com.sonnet.service.impl;
 
+import cn.hutool.Hutool;
+import cn.hutool.core.codec.Base64;
+import cn.hutool.core.util.HashUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.sonnet.constant.UserConstant;
 import com.sonnet.model.domain.User;
 import com.sonnet.service.UserService;
 import com.sonnet.mapper.UserMapper;
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -16,6 +23,7 @@ import org.springframework.stereotype.Service;
 * @createDate 2024-01-16 20:18:12
 */
 @Service
+@Slf4j
 public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     implements UserService{
 
@@ -28,10 +36,47 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
     BCryptPasswordEncoder bCryptPasswordEncoder;
 
+    /**
+     * 处理用户注册
+     *
+     * @param userAccount
+     * @param password
+     * @param checkPassword
+     * @return
+     */
     @Override
     public long userRegister(String userAccount, String password, String checkPassword) {
 
         // 1. 对参数进行校验
+        int registerParameter = validateRegisterParameter(userAccount, password, checkPassword);
+        if (registerParameter < 0){
+            return -1;
+        }
+
+        // 2. 对密码进行加密
+        String encryptPassword = Base64.encode(password);
+
+        // 3，将数据存入数据库
+        User user = new User();
+        user.setUserAccount(userAccount);
+        user.setUserPassword(encryptPassword);
+        boolean saveResult = this.save(user);
+        if (!saveResult) {
+            return -1;
+        }
+
+        return user.getId();
+    }
+
+    /**
+     * 校验用户注册的参数
+     *
+     * @param userAccount
+     * @param password
+     * @param checkPassword
+     * @return
+     */
+    private int validateRegisterParameter(String userAccount, String password, String checkPassword) {
 
         // 判断用户名、密码、二次密码是否为空
         boolean hasBlank = StrUtil.hasBlank(userAccount, password, checkPassword);
@@ -68,54 +113,104 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
             return -1;
         }
 
-
-        // 2. 对密码进行加密
-
-        String encryptPassword = bCryptPasswordEncoder.encode(password);
-
-
-        // 3，将数据存入数据库
-        User user = new User();
-        user.setUserAccount(userAccount);
-        user.setUserPassword(encryptPassword);
-        boolean saveResult = this.save(user);
-        if (!saveResult) {
-            return -1;
-        }
-
-
-
-        return user.getId();
+        return 1;
     }
+
+
+    /**
+     * 处理用户注册
+     *
+     * @param userAccount
+     * @param password
+     * @param request
+     * @return
+     */
 
     @Override
-    public User userLogin(String userAccount, String password) {
+    public User userLogin(String userAccount, String password, HttpServletRequest request) {
 
-        validateLoginParameter(userAccount,password);
+        // 参数校验
+         if (!validateLoginParameter(userAccount,password)) {
+            return null;
+        }
 
         // 密码正确则返回用户信息，否则返回 null
-        isCorrectPassword(userAccount,password);
+        User user = isCorrectPassword(userAccount, password);
+        if (user == null){
+            return null;
+        }
 
-        hindUserInfo();
+        // 用户信息脱敏
+        User safeUser = hindUserInfo(user);
 
-        saveUserStatus();
+        // 保存用户状态
+        saveUserStatus(safeUser, request);
 
-
-        return null;
+        return safeUser;
     }
 
-    private void validateLoginParameter(String userAccount, String password) {
+    /**
+     * 校验用户登录参数
+     *
+     * @param userAccount
+     * @param password
+     * @return
+     */
+    private boolean validateLoginParameter(String userAccount, String password) {
+
+        if (StrUtil.hasBlank(userAccount,password)){
+            return false;
+        }
+
+        return true;
     }
 
-    private void isCorrectPassword(String userAccount, String password) {
-
+    /**
+     * 用户登录密码是否正确，正确返回用户信息，否则返回 null
+     * @param userAccount
+     * @param password
+     * @return
+     */
+    private User isCorrectPassword(String userAccount, String password) {
+        QueryWrapper<User> userQueryWrapper = new QueryWrapper<>();
+        userQueryWrapper.eq("user_account", userAccount);
+        userQueryWrapper.eq("user_password",Base64.encode(password));
+        User user = userMapper.selectOne(userQueryWrapper);
+        if (user == null){
+            log.info("account or password is incorrect!");
+            return null;
+        }
+        return user;
     }
 
-    private void hindUserInfo() {
+    /**
+     * 用户信息脱敏
+     * @param user
+     * @return
+     */
+    private User hindUserInfo(User user) {
+        User safeUser = new User();
+        safeUser.setId(user.getId());
+        safeUser.setUsername(user.getUsername());
+        safeUser.setUserAccount(user.getUserAccount());
+        safeUser.setAvatarUrl(user.getAvatarUrl());
+        safeUser.setGender(user.getGender());
+        safeUser.setPhone(user.getPhone());
+        safeUser.setEmail(user.getEmail());
+        safeUser.setUserStatus(user.getUserStatus());
+        safeUser.setUserRole(0);
 
+        return safeUser;
     }
 
-    private void saveUserStatus() {
+    /**
+     * 保存用户信息状态
+     * @param user
+     * @param request
+     */
+    private void saveUserStatus(User user, HttpServletRequest request) {
+
+        request.getSession().setAttribute(UserConstant.USER_LOGIN_STATE, user);
 
     }
 

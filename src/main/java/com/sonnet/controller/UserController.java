@@ -1,12 +1,12 @@
 package com.sonnet.controller;
 
 import cn.hutool.core.util.StrUtil;
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.sonnet.model.domain.User;
 import com.sonnet.model.request.UserLoginRequest;
 import com.sonnet.model.request.UserRegisterRequest;
 import com.sonnet.service.UserService;
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,38 +26,36 @@ public class UserController {
     @Resource
     private UserService userService;
 
+    /**
+     * 用户注册接口
+     *
+     * @param userRegisterRequest
+     * @return
+     */
     @PostMapping("/register")
-    public Long userRegister(@RequestBody UserRegisterRequest userRegisterRequest){
+    public long userRegister(@RequestBody UserRegisterRequest userRegisterRequest){
 
-
-        int validateResult = validateRegisterParameters(userRegisterRequest);
-        if (validateResult < 0){
-            return null;
+        if (userRegisterRequest == null){
+            return (long)-1;
         }
-
 
         String userAccount = userRegisterRequest.getUserAccount();
         String password = userRegisterRequest.getPassword();
         String checkPassword = userRegisterRequest.getCheckPassword();
+
+        if(StrUtil.hasBlank(userAccount,password,checkPassword)){
+            return (long) -1;
+        }
+
         return userService.userRegister(userAccount,password,checkPassword);
     }
 
 
-    private int validateRegisterParameters(UserRegisterRequest userRegisterRequest) {
-        if (userRegisterRequest == null){
-            return -1;
-        }
 
-        if (StrUtil.hasBlank(userRegisterRequest.getUserAccount(),userRegisterRequest.getPassword(),userRegisterRequest.getCheckPassword())){
-            return -1;
-        }
-
-        return 1;
-    }
 
 
     @PostMapping("/login")
-    public User userLogin(@RequestBody UserLoginRequest userLoginRequest){
+    public User userLogin(@RequestBody UserLoginRequest userLoginRequest, HttpServletRequest request){
 
 
         if (!validateLoginParameter(userLoginRequest)) {
@@ -66,7 +64,7 @@ public class UserController {
 
         String userAccount = userLoginRequest.getUserAccount();
         String password = userLoginRequest.getPassword();
-        return userService.userLogin(userAccount,password);
+        return userService.userLogin(userAccount,password,request);
     }
 
     private boolean validateLoginParameter(UserLoginRequest userLoginRequest) {
